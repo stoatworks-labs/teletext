@@ -14,6 +14,8 @@
 #                 before a host has to find out. The text compiled here is
 #                 what `txtest --dump-shaders` writes: the exact strings the
 #                 plugin hands the driver.
+#   demo          the browser demo's copy of every shader is still the
+#                 plugin's, character for character (demo/tools/check_shaders.py).
 #   optimal       the row programme's cost equals an exhaustive search,
 #                 exactly. No GL: this is the encoder's claim on its own.
 #   checks        every picture check, at TWO rasters: 320x180, which is what
@@ -99,6 +101,23 @@ else
 	else
 		fail "$bad of $n shaders do not compile"
 	fi
+fi
+
+#---------------------------------------------------------------------------
+# The browser demo's copy of every shader is the plugin's, character for
+# character. A drifted comment counts. It says nothing about the page's PORT
+# of the CPU half; only a reader checks that.
+#---------------------------------------------------------------------------
+step "demo shaders"
+if [ -f demo/tools/check_shaders.py ]; then
+	if out=$(python3 demo/tools/check_shaders.py 2>&1); then
+		pass "$( printf '%s\n' "$out" | tail -1 )"
+	else
+		fail "the demo's shaders have drifted from source/Shaders.cpp"
+		printf '%s\n' "$out" | tail -12
+	fi
+else
+	printf '   skipped: no demo/\n'
 fi
 
 step "optimal (no GL)"
