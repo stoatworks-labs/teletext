@@ -11,9 +11,10 @@
 > that carried it through a resize, and a single-bit error blanks its cell while a
 > double-bit error corrupts it and neither moves a row — with nine negative
 > controls that prove each check can fail. It has **never been loaded into
-> Resolume**; the only host it has met is
+> Resolume on macOS**; the only host it has met there is
 > [oxbow](https://github.com/stoatworks-labs/oxbow), which is a real FFGL host and
-> is not Resolume. See [Status](#status).
+> is not Resolume. On Windows it has run in Resolume Arena 7.27.1, on software
+> rendering. See [Status](#status).
 
 A picture sent as Level 1 teletext mosaic graphics, as an FFGL effect for
 [Resolume](https://resolume.com) Arena and Avenue.
@@ -96,7 +97,9 @@ safe area with the header on page 100.
 
 ## Status
 
-**v0.1.0, local and unreleased — 24 September 2026.**
+**v0.1.0 — 24 September 2026.** The first release: a universal macOS bundle and a
+Windows x64 DLL, with a [user guide](https://stoatworks-labs.com/software/teletext/guide/)
+and a [browser demo](https://teletext-demo.stoatworks-labs.com/).
 
 ### Measured offline, on macOS
 
@@ -128,14 +131,21 @@ separate, noisier run. macOS figures only.
 
 ### Not established
 
-It has **never been loaded into Resolume.** Everything above was compiled, rendered and
-measured offline against the real plugin class in a headless CGL context, plus an
-`oxbow` load. How 12 controls in three groups present in Arena's inspector, what the
-host's clock does to the field counter over a long session, and whether the read-back
-stall is felt on a busy composition are untested. No Windows build has been made. The
-look has been seen on a synthetic test card only, never on footage. The separated
-gutter follows jsbeeb's reading of the SAA5050, not the datasheet figure. No OpenFX
-port, no browser demo, no user guide: none in scope for 0.1.0.
+It has **never been loaded into Resolume on macOS.** Everything above was compiled,
+rendered and measured offline against the real plugin class in a headless CGL context,
+plus an `oxbow` load. What the host's clock does to the field counter over a long
+session, and whether the read-back stall is felt on a busy composition, are untested.
+On Windows it has: a build of v0.1.0 loads, registers and renders in Resolume Arena 7.27.1 on software rendering (win-lab, Mesa llvmpipe, no GPU, 2026-09-24), with all 18 host controls matching the declaration, and Arena's log stays clean: 8 of the fleet Arena gate's 9 checks, in two runs. The ninth, controls, read Rows per Field and Freeze dead both times, because the gate holds a still picture: a still page comes round in under a second at any Rows per Field, and a frozen still is the same still; `--carriage` measures the first and the sweep the second. Software rendering says nothing about a GPU or about speed.
+The look has been seen on the synthetic test card and, through the harness's `--pipe`,
+on Resolume's bundled demo clips for the project video: eight colours and nothing
+between means a dark clip loses its mid-tones to black, so the guide says to lift a
+dark clip with a brightness effect ahead of this one. The separated gutter follows
+jsbeeb's reading of the SAA5050, not the datasheet figure. No OpenFX port, no presets.
+There is a [user guide](https://stoatworks-labs.com/software/teletext/guide/). The
+[browser demo](https://teletext-demo.stoatworks-labs.com/) runs the plugin's own
+shaders and reads the sixel means back as the plugin does, but its CPU half — the
+encoder, the transmission and the decoder — is a hand port to JavaScript, and nothing
+checks a port but a reader.
 
 ## Build
 
@@ -166,6 +176,7 @@ clock:
 ./build/txtest --negative                              # and the checks can fail
 ./build/txtest --bench                                 # 720p through 4K
 python3 tools/sweep.py                                 # no control is silently dead
+python3 demo/tools/check_shaders.py                    # the browser demo's shaders are the plugin's
 tools/verify.sh                                        # all of it, on a fresh universal build
 ```
 
