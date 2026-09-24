@@ -24,6 +24,17 @@ A picture sent as Level 1 teletext mosaic graphics, as an FFGL effect for
 <sub>One frame, rendered by `txtest`, the offline harness — not captured from
 Resolume. The test card at the defaults: 4:3, Hold Graphics on, four rows a field.</sub>
 
+[![Teletext — a picture sent as Level 1 teletext mosaics, for Resolume](docs/video-thumb.png)](https://www.youtube.com/watch?v=Rfbyte8kAWk)
+
+*[Watch it](https://www.youtube.com/watch?v=Rfbyte8kAWk) — 53 seconds:
+the page at the defaults with its black boundary columns, Hold Graphics filling the gaps,
+backgrounds off and on and Separated, one row a field tearing against all twenty-four at once,
+Signal Quality falling until cells blank and stray letters appear, Freeze, Show Codes, the
+header's page number and clock, Grid Fit Fill, the two error spaces and Mix down to the clip.
+Every frame is the real plugin's output: an FFGL plugin has no window, so the footage is
+rendered by this repository's own offline harness (`txtest --pipe`, driven by a cue sheet)
+rather than filmed off a screen, and the clips are Resolume's bundled demo media.*
+
 ## The one idea
 
 A teletext page is 40 columns by 24 rows of character cells. A cell is a character,
