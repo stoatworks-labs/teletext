@@ -35,6 +35,38 @@ Every frame is the real plugin's output: an FFGL plugin has no window, so the fo
 rendered by this repository's own offline harness (`txtest --pipe`, driven by a cue sheet)
 rather than filmed off a screen, and the clips are Resolume's bundled demo media.*
 
+<!-- downloads:start -->
+
+## Download
+
+**[v0.1.0](https://github.com/stoatworks-labs/teletext/releases/tag/v0.1.0)** — prebuilt for macOS and Windows. Pick your platform:
+
+<details>
+<summary><b>macOS</b> — Universal (Apple Silicon + Intel)</summary>
+
+| Build | Download | Size |
+| --- | --- | --- |
+| Universal (Apple Silicon + Intel) · .dmg disk image | [`teletext-0.1.0-macos-universal.dmg`](https://github.com/stoatworks-labs/teletext/releases/download/v0.1.0/teletext-0.1.0-macos-universal.dmg) | 239 KB |
+| Universal (Apple Silicon + Intel) · .zip archive | [`teletext-macos-universal.zip`](https://github.com/stoatworks-labs/teletext/releases/latest/download/teletext-macos-universal.zip) | 200 KB |
+
+</details>
+
+<details>
+<summary><b>Windows</b> — x64</summary>
+
+| Build | Download | Size |
+| --- | --- | --- |
+| x64 · .exe installer | [`teletext-0.1.0-windows-x86_64-setup.exe`](https://github.com/stoatworks-labs/teletext/releases/download/v0.1.0/teletext-0.1.0-windows-x86_64-setup.exe) | 228 KB |
+| x64 · .zip archive | [`teletext-windows-x86_64.zip`](https://github.com/stoatworks-labs/teletext/releases/latest/download/teletext-windows-x86_64.zip) | 122 KB |
+
+</details>
+
+All builds, checksums and release notes: [github.com/stoatworks-labs/teletext/releases](https://github.com/stoatworks-labs/teletext/releases).
+
+macOS builds are signed and notarised and open normally. The Windows builds are unsigned, so SmartScreen warns once.
+
+<!-- downloads:end -->
+
 ## The one idea
 
 A teletext page is 40 columns by 24 rows of character cells. A cell is a character,
