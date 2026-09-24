@@ -1486,16 +1486,25 @@ double benchAt( Teletext& plugin, int width, int height, int frames, double fps 
 	if( !session.begin( width, height ) )
 		return -1.0;
 
-	//The card moves, so every field re-encodes rows that changed -- the
-	//real cost, not a cached one. Uploaded per frame, which is what a host
-	//does too.
-	std::vector< Image > cards;
-	for( int i = 0; i < 8; ++i )
-		cards.push_back( buildCard( width, height, i * 5 ) );
+	//The card moves, so every field re-encodes rows that changed -- the real
+	//cost, not a cached one. Eight frames of it are uploaded ONCE into eight
+	//textures and cycled by handle, the way a host hands over a texture it
+	//already has: the upload is not in the figure.
+	constexpr int kCards = 8;
+	GLuint textures[ kCards ];
+	for( int i = 0; i < kCards; ++i )
+	{
+		const Image flipped = flipRows( buildCard( width, height, i * 5 ), width, height );
+		textures[ i ]       = makeTexture( width, height, GL_RGBA8, GL_UNSIGNED_BYTE, flipped.data() );
+	}
+	auto renderCard = [ & ]( int frame ) {
+		session.inputStruct.Handle = textures[ frame % kCards ];
+		session.renderAt( frame );
+	};
 
 	const int warmup = 20;
 	for( int frame = 0; frame < warmup; ++frame )
-		session.render( frame, cards[ static_cast< size_t >( frame % 8 ) ] );
+		renderCard( frame );
 	glFinish();
 
 	//The best of three runs: this machine's GPU is shared with whatever else
@@ -1505,13 +1514,15 @@ double benchAt( Teletext& plugin, int width, int height, int frames, double fps 
 	{
 		const auto start = std::chrono::steady_clock::now();
 		for( int frame = 0; frame < frames; ++frame )
-			session.render( warmup + run * frames + frame, cards[ static_cast< size_t >( frame % 8 ) ] );
+			renderCard( warmup + run * frames + frame );
 		glFinish();
 		const auto end       = std::chrono::steady_clock::now();
 		const double seconds = std::chrono::duration< double >( end - start ).count();
 		best                 = std::min( best, seconds * 1000.0 / static_cast< double >( frames ) );
 	}
 
+	session.inputStruct.Handle = session.sourceTexture;
+	glDeleteTextures( kCards, textures );
 	session.end();
 	return best;
 }

@@ -57,55 +57,63 @@ struct Layer
 	}
 };
 
-/// A transition: what it costs at this cell, the byte it emits and where it
-/// leads. `advances` is false only under kPerturbFreeCodes for a control.
-struct Transition
+/// What a cell offers every state, computed once per cell rather than once
+/// per state: the best mosaic and its cost for each ( fg, bg ), and the cost
+/// of a space on each background. 224 states x 11 transitions a cell would
+/// otherwise recompute these from the table every time.
+struct CellCache
 {
-	int64_t cost;
-	uint8_t byte;
-	State next;
+	int bits[ 8 ][ 8 ];
+	int64_t cost[ 8 ][ 8 ];
+	int64_t space[ 8 ];
 };
+
+void buildCache( const CostTable& table, int cell, CellCache& out )
+{
+	for( int fg = 1; fg <= 7; ++fg )
+		for( int bg = 0; bg < 8; ++bg )
+			out.bits[ fg ][ bg ] = BestMosaic( table, cell, fg, bg, out.cost[ fg ][ bg ] );
+	for( int bg = 0; bg < 8; ++bg )
+		out.space[ bg ] = DisplayCost( table, cell, 0, 0, bg );
+}
 
 /// The mosaic the programme assumes is held when a control code is placed at
 /// cell i under state s: the best mosaic of the cell before, under the same
 /// colours. Exact when that cell was a mosaic. Nothing is held at cell 0 or
 /// in alphanumerics.
-int assumedHeld( const CostTable& table, int cell, const State& s )
+int assumedHeld( const CellCache* previous, const State& s )
 {
-	if( cell == 0 || !s.mosaics )
+	if( previous == nullptr || !s.mosaics )
 		return -1;
-	int64_t ignored;
-	return BestMosaic( table, cell - 1, s.fg, s.bg, ignored );
+	return previous->bits[ s.fg ][ s.bg ];
 }
 
-/// Every transition out of state s at cell i.
-void transitions( const CostTable& table, int cell, const State& s, const Options& options,
-                  std::vector< Transition >& out, std::vector< bool >& advances )
+/// Every transition out of state s at cell i, handed to `f( cost, byte,
+/// next, advances )`. A callback rather than a vector: this runs 224 states
+/// x 40 cells x 2 programmes per row, and a row is encoded 50 times a
+/// second per Rows per Field.
+template< typename F >
+void forEachTransition( const CostTable& table, int cell, const CellCache& here, const CellCache* previous, const State& s,
+                        const Options& options, F&& f )
 {
-	out.clear();
-	advances.clear();
 	const bool free = ( options.perturb & codes::kPerturbFreeCodes ) != 0;
 
 	//1. Fill the cell with the best mosaic (mosaics mode) or a space.
 	if( s.mosaics )
-	{
-		int64_t cost;
-		const int bits = BestMosaic( table, cell, s.fg, s.bg, cost );
-		out.push_back( { cost, codes::MosaicCode( bits ), s } );
-	}
+		f( here.cost[ s.fg ][ s.bg ], codes::MosaicCode( here.bits[ s.fg ][ s.bg ] ), s, true );
 	else
-		out.push_back( { DisplayCost( table, cell, 0, s.fg, s.bg ), codes::kSpace, s } );
-	advances.push_back( true );
+		f( here.space[ s.bg ], codes::kSpace, s, true );
 
 	//The cost of a control cell: the held mosaic under Hold, else a space,
 	//in the foreground now in effect and the background AFTER any set-at.
-	const int held = assumedHeld( table, cell, s );
+	const int held = assumedHeld( previous, s );
 	auto controlCost = [ & ]( int bgAfter, bool holdAfter ) {
 		const int bits = ( holdAfter && s.mosaics && held >= 0 ) ? held : 0;
-		return DisplayCost( table, cell, bits, s.fg, bgAfter );
+		return bits == 0 ? here.space[ bgAfter ] : DisplayCost( table, cell, bits, s.fg, bgAfter );
 	};
 
 	//2. A mosaic colour code: set-after.
+	const int64_t colourCost = controlCost( s.bg, s.hold );
 	for( int c = 1; c <= 7; ++c )
 	{
 		if( s.mosaics && c == s.fg )
@@ -113,8 +121,7 @@ void transitions( const CostTable& table, int cell, const State& s, const Option
 		State n   = s;
 		n.mosaics = true;
 		n.fg      = c;
-		out.push_back( { controlCost( s.bg, s.hold ), static_cast< uint8_t >( codes::kMosaicColourBase | c ), n } );
-		advances.push_back( !free );
+		f( colourCost, static_cast< uint8_t >( codes::kMosaicColourBase | c ), n, !free );
 	}
 
 	if( options.allowBackground )
@@ -124,16 +131,14 @@ void transitions( const CostTable& table, int cell, const State& s, const Option
 		{
 			State n = s;
 			n.bg    = s.fg;
-			out.push_back( { controlCost( n.bg, s.hold ), codes::kNewBackground, n } );
-			advances.push_back( !free );
+			f( controlCost( n.bg, s.hold ), codes::kNewBackground, n, !free );
 		}
 		//4. Black Background: set-at.
 		if( s.bg != codes::kBlack )
 		{
 			State n = s;
 			n.bg    = codes::kBlack;
-			out.push_back( { controlCost( n.bg, s.hold ), codes::kBlackBackground, n } );
-			advances.push_back( !free );
+			f( controlCost( n.bg, s.hold ), codes::kBlackBackground, n, !free );
 		}
 	}
 
@@ -142,8 +147,7 @@ void transitions( const CostTable& table, int cell, const State& s, const Option
 	{
 		State n = s;
 		n.hold  = true;
-		out.push_back( { controlCost( s.bg, true ), codes::kHoldMosaics, n } );
-		advances.push_back( !free );
+		f( controlCost( s.bg, true ), codes::kHoldMosaics, n, !free );
 	}
 }
 
@@ -177,11 +181,14 @@ Plan viterbi( const CostTable& table, int first, const Options& options, bool al
 	layers.emplace_back();
 	layers.back().cost[ indexOf( startState() ) ] = 0;
 
-	std::vector< Transition > ts;
-	std::vector< bool > advances;
+	std::vector< CellCache > caches( static_cast< size_t >( table.count ) );
+	for( int cell = 0; cell < table.count; ++cell )
+		buildCache( table, cell, caches[ static_cast< size_t >( cell ) ] );
 
 	for( int cell = first; cell < table.count; ++cell )
 	{
+		const CellCache& here     = caches[ static_cast< size_t >( cell ) ];
+		const CellCache* previous = cell > 0 ? &caches[ static_cast< size_t >( cell ) - 1 ] : nullptr;
 		//Within-cell layers first (free codes only), then the advancing one.
 		for( int sub = 0; sub < layersPerCell; ++sub )
 		{
@@ -189,36 +196,36 @@ Plan viterbi( const CostTable& table, int first, const Options& options, bool al
 			const int from  = static_cast< int >( layers.size() ) - 1;
 			layers.emplace_back();
 			Layer& next = layers.back();
-			const Layer& here = layers[ static_cast< size_t >( from ) ];
+			const Layer& current = layers[ static_cast< size_t >( from ) ];
 			//A state may also stay put through a within-cell layer.
 			if( !last )
 				for( int s = 0; s < kStates; ++s )
-					if( here.cost[ s ] < kInfinite )
+					if( current.cost[ s ] < kInfinite )
 					{
-						next.cost[ s ]      = here.cost[ s ];
+						next.cost[ s ]      = current.cost[ s ];
 						next.prevLayer[ s ] = from;
 						next.prevState[ s ] = s;
 						next.byte[ s ]      = -1;
 					}
 			for( int s = 0; s < kStates; ++s )
 			{
-				if( here.cost[ s ] >= kInfinite )
+				if( current.cost[ s ] >= kInfinite )
 					continue;
-				transitions( table, cell, stateOf( s ), o, ts, advances );
-				for( size_t t = 0; t < ts.size(); ++t )
-				{
-					if( advances[ t ] != last )
-						continue;
-					const int n         = indexOf( ts[ t ].next );
-					const int64_t total = here.cost[ s ] + ts[ t ].cost;
-					if( total < next.cost[ n ] )
-					{
-						next.cost[ n ]      = total;
-						next.prevLayer[ n ] = from;
-						next.prevState[ n ] = s;
-						next.byte[ n ]      = ts[ t ].byte;
-					}
-				}
+				const int64_t base = current.cost[ s ];
+				forEachTransition( table, cell, here, previous, stateOf( s ), o,
+				                   [ & ]( int64_t cost, uint8_t byte, const State& nextState, bool advances ) {
+					                   if( advances != last )
+						                   return;
+					                   const int n         = indexOf( nextState );
+					                   const int64_t total = base + cost;
+					                   if( total < next.cost[ n ] )
+					                   {
+						                   next.cost[ n ]      = total;
+						                   next.prevLayer[ n ] = from;
+						                   next.prevState[ n ] = s;
+						                   next.byte[ n ]      = byte;
+					                   }
+				                   } );
 			}
 		}
 	}
@@ -255,33 +262,37 @@ Plan greedy( const CostTable& table, int first, const Options& options )
 {
 	Plan plan;
 	State s = startState();
-	std::vector< Transition > ts, ts2;
-	std::vector< bool > adv, adv2;
+	std::vector< CellCache > caches( static_cast< size_t >( table.count ) );
+	for( int cell = 0; cell < table.count; ++cell )
+		buildCache( table, cell, caches[ static_cast< size_t >( cell ) ] );
+	auto cacheAt = [ & ]( int cell ) -> const CellCache* {
+		return cell >= 0 && cell < table.count ? &caches[ static_cast< size_t >( cell ) ] : nullptr;
+	};
 	for( int cell = first; cell < table.count; ++cell )
 	{
-		transitions( table, cell, s, options, ts, adv );
-		int bestT        = 0;
-		int64_t bestCost = kInfinite;
-		for( size_t t = 0; t < ts.size(); ++t )
-		{
-			int64_t look = 0;
-			if( cell + 1 < table.count )
-			{
-				transitions( table, cell + 1, ts[ t ].next, options, ts2, adv2 );
-				look = kInfinite;
-				for( const Transition& u : ts2 )
-					look = std::min( look, u.cost );
-			}
-			const int64_t total = ts[ t ].cost + look;
-			if( total < bestCost )
-			{
-				bestCost = total;
-				bestT    = static_cast< int >( t );
-			}
-		}
-		plan.bytes.push_back( ts[ static_cast< size_t >( bestT ) ].byte );
-		plan.cost += ts[ static_cast< size_t >( bestT ) ].cost;
-		s = ts[ static_cast< size_t >( bestT ) ].next;
+		int64_t bestTotal = kInfinite, bestCost = 0;
+		uint8_t bestByte  = codes::kSpace;
+		State bestNext    = s;
+		forEachTransition( table, cell, *cacheAt( cell ), cacheAt( cell - 1 ), s, options,
+		                   [ & ]( int64_t cost, uint8_t byte, const State& nextState, bool ) {
+			                   int64_t look = 0;
+			                   if( cell + 1 < table.count )
+			                   {
+				                   look = kInfinite;
+				                   forEachTransition( table, cell + 1, *cacheAt( cell + 1 ), cacheAt( cell ), nextState, options,
+				                                      [ & ]( int64_t c2, uint8_t, const State&, bool ) { look = std::min( look, c2 ); } );
+			                   }
+			                   if( cost + look < bestTotal )
+			                   {
+				                   bestTotal = cost + look;
+				                   bestCost  = cost;
+				                   bestByte  = byte;
+				                   bestNext  = nextState;
+			                   }
+		                   } );
+		plan.bytes.push_back( bestByte );
+		plan.cost += bestCost;
+		s = bestNext;
 	}
 	return plan;
 }
