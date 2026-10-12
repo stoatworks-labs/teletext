@@ -355,7 +355,8 @@ is in.
   because the sixel means are sums of floating-point decodes that round differently; the
   programme itself is integer and agrees bit for bit given the same means. No check asserts the
   card's encoding, only structure on pure-colour sources and invariants on the card.
-- **Checked at up to 1920 × 1080** in the harness, and only timed at 4K.
+- **Checked at 320 × 180 and 1280 × 720** in the harness, and only timed above that, at
+  1920 × 1080, 2560 × 1440 and 4K. Nothing checks the picture at those sizes.
 - **Only ever run on an Apple M4 Max**, although the macOS build contains an Intel slice. On
   Windows, see the note at the top of this guide.
 - **No presets, no audio input** and no OpenFX version.
