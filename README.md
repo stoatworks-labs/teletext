@@ -1,39 +1,37 @@
 # teletext
 
 > **AI-assisted project.** This codebase was created with [Claude](https://claude.com/claude-code)
-> (Anthropic), directed and reviewed by a human author. The teletext is not
-> asserted but measured: an offline harness drives the real plugin class in a
-> headless GL context and reads each claim back — the row encoder's cost equals an
-> exhaustive search exactly on 24 random rows, a colour boundary costs exactly one
-> cell of black and a background change exactly two, every one of 921,600 output
-> pixels is one of eight colours and every sixel is uniform, the separated gutter
-> is where the SAA5050 puts it to the pixel, each row shows the frame of the field
-> that carried it through a resize, and a single-bit error blanks its cell while a
-> double-bit error corrupts it and neither moves a row — with nine negative
-> controls that prove each check can fail. It has **never been loaded into
+> (Anthropic), directed and reviewed by a human author. It has **never been loaded into
 > Resolume on macOS**; the only host it has met there is
-> [oxbow](https://github.com/stoatworks-labs/oxbow), which is a real FFGL host and
-> is not Resolume. On Windows it has run in Resolume Arena 7.27.1, on software
-> rendering. See [Status](#status).
+> [oxbow](https://github.com/stoatworks-labs/oxbow), which is a working FFGL host but isn't
+> Resolume. On Windows it has run in Resolume Arena 7.27.1, on software rendering. Everything
+> else is measured by an offline harness that drives the plugin class itself in a headless GL
+> context and reads each claim back off the picture: the row encoder matches an exhaustive
+> search exactly, every output pixel is one of the eight colours, and a single-bit error
+> blanks its cell without moving a row. Nine negative controls show that each check can fail.
+> The numbers are under [Status](#status).
 
-A picture sent as Level 1 teletext mosaic graphics, as an FFGL effect for
-[Resolume](https://resolume.com) Arena and Avenue.
+Your clip, sent as Level 1 teletext mosaic graphics, as an FFGL effect for
+[Resolume](https://resolume.com) Arena and Avenue. Eight colours, chunky blocks and a
+column of black wherever the colour changes, because in teletext the colour code takes
+up a cell of its own. Squeezing a picture through those rules is an optimisation
+problem, and the plugin solves it properly for every row it sends.
 
 ![The test card as a teletext page: a header row with a page number and a running clock, a sky in solid blue over cyan and white, a row of six colour patches each separated by a black column, and a grey ramp reduced to black and white blocks](docs/hero.png)
 
-<sub>One frame, rendered by `txtest`, the offline harness — not captured from
+<sub>One frame, rendered by `txtest`, the offline harness, rather than captured from
 Resolume. The test card at the defaults: 4:3, Hold Graphics on, four rows a field.</sub>
 
 [![Teletext — a picture sent as Level 1 teletext mosaics, for Resolume](docs/video-thumb.png)](https://www.youtube.com/watch?v=Rfbyte8kAWk)
 
-*[Watch it](https://www.youtube.com/watch?v=Rfbyte8kAWk) — 53 seconds:
+*[Watch it](https://www.youtube.com/watch?v=Rfbyte8kAWk) (53 seconds):
 the page at the defaults with its black boundary columns, Hold Graphics filling the gaps,
 backgrounds off and on and Separated, one row a field tearing against all twenty-four at once,
 Signal Quality falling until cells blank and stray letters appear, Freeze, Show Codes, the
 header's page number and clock, Grid Fit Fill, the two error spaces and Mix down to the clip.
-Every frame is the real plugin's output: an FFGL plugin has no window, so the footage is
-rendered by this repository's own offline harness (`txtest --pipe`, driven by a cue sheet)
-rather than filmed off a screen, and the clips are Resolume's bundled demo media.*
+It's all the plugin's own output. An FFGL plugin doesn't have a window to film, so the footage
+comes from this repo's offline harness (`txtest --pipe`, driven by a cue sheet) rather than a
+recording of a screen, and the clips are Resolume's bundled demo media.*
 
 <!-- downloads:start -->
 
@@ -71,24 +69,24 @@ macOS builds are signed and notarised and open normally. The Windows builds are 
 
 A teletext page is 40 columns by 24 rows of character cells. A cell is a character,
 or a **2×3 mosaic** of sixels in the current foreground colour over the current
-background. There are eight colours. And colour is **not stored per cell**: it is
+background. There are eight colours. And colour **isn't stored per cell**: it's
 set by a control code in the row that changes the colour from that cell onwards, and
-**the control code itself occupies a cell**, which shows as background — a space —
+**the control code itself takes up a cell**, which shows as background (a space)
 unless Hold Graphics is on. A new background takes two codes. Every row starts white
 on black, in alphanumerics.
 
-So a teletext encoder is an optimiser under a hard serial constraint. This plugin runs
-the clip through an exactly optimal one — a Viterbi programme per row over the
-decoder's own state — and the look falls out of the constraint rather than being
-drawn:
+So a teletext encoder is an optimiser working under a hard serial constraint. This
+plugin runs the clip through an exactly optimal one (a Viterbi programme per row over
+the decoder's own state), and the look falls out of the constraint without anyone
+having to draw it:
 
 - **The gap.** Every change of foreground colour costs a cell of background, so
   colour boundaries sit on a column of black blocks. Column 0 of every row with a
   mosaic in it is a code, because a row starts in alphanumerics.
-- **Colour is rationed.** You cannot change colour in adjacent cells; a new
-  background costs two; and where the encoder may move the background it finds the
-  trick teletext artists found — a solid boundary that costs three code cells and no
-  black at all, because each code shows the background it is changing to.
+- **Colour is rationed.** You can't change colour in adjacent cells, a new
+  background costs two, and where the encoder may move the background it finds the
+  trick teletext artists found: a solid boundary that costs three code cells and no
+  black at all, because each code shows the background it's changing to.
 - **Eight colours and 80×72 sixels**, and nothing between. A mid-tone is whichever
   of the eight is nearest, in RGB or weighted by luma.
 - **Hold Graphics** fills the code cells with the last mosaic instead of a space,
@@ -103,16 +101,16 @@ drawn:
 
 ### What is drawn, and what is not
 
-The decoder (`source/Decoder.cpp`) is the receiver's half of the standard, and it is
+The decoder (`source/Decoder.cpp`) is the receiver's half of the standard, and it's
 the reference for everything: the encoder is judged by what the decoder makes of its
 bytes, and the render pass draws exactly the cells the decoder produces on the
-SAA5050's 6×10-dot cell — blocks of 3×3, 3×4 and 3×3 dots, contiguous or separated
+SAA5050's 6×10-dot cell: blocks of 3×3, 3×4 and 3×3 dots, contiguous or separated
 (each block losing its left column and bottom line), scaled up by whole pixels where
 the frame allows.
 
 The header row is a real row 0: page number, a service name, the page again and a
 running clock, in alphanumerics with their own colour codes, drawn from a 5×7 bitmap
-font of our own. No broadcaster's name appears anywhere.
+font of my own. No broadcaster's name appears anywhere.
 
 ### The honest limit
 
@@ -121,10 +119,10 @@ Hold Graphics is approximate. Under Hold a code cell shows the last mosaic
 state; the programme costs a held cell as if the previous cell were a mosaic placed
 under the state's own colours, which is exact in the common case of a colour change
 between two runs. Both programmes are run, with and without Hold, each byte string is
-decoded for what it actually shows, and the cheaper is kept — so the result with Hold
-on is never worse than the exact optimum without it. `txtest --optimal` measures both
-bounds. Alphanumeric characters are used only for the header; the encoder draws with
-mosaics alone, and Level 1 only — no double height, no flash, no boxes.
+decoded for what it actually shows, and the cheaper one is kept, so the result with
+Hold on is never worse than the exact optimum without it. `txtest --optimal` measures
+both bounds. Alphanumeric characters are used only for the header; the encoder draws
+with mosaics alone, and Level 1 only: no double height, no flash, no boxes.
 
 ## Controls
 
@@ -140,13 +138,13 @@ safe area with the header on page 100.
 
 ## Status
 
-**v0.1.0 — 24 September 2026.** The first release: a universal macOS bundle and a
+**v0.1.0, 24 September 2026.** The first release: a universal macOS bundle and a
 Windows x64 DLL, with a [user guide](https://stoatworks-labs.com/software/teletext/guide/)
 and a [browser demo](https://teletext-demo.stoatworks-labs.com/).
 
 ### Measured offline, on macOS
 
-`tools/verify.sh` passes on this machine (M4 Max, macOS 26.4) against a fresh
+`tools/verify.sh` passes on this Mac (M4 Max, macOS 26.4) against a fresh
 universal Release build, running every picture check at **two rasters**, 320×180
 and 1280×720. What it establishes, in numbers:
 
@@ -175,19 +173,19 @@ separate, noisier run. macOS figures only.
 ### Not established
 
 It has **never been loaded into Resolume on macOS.** Everything above was compiled,
-rendered and measured offline against the real plugin class in a headless CGL context,
+rendered and measured offline against the plugin class itself in a headless CGL context,
 plus an `oxbow` load. What the host's clock does to the field counter over a long
-session, and whether the read-back stall is felt on a busy composition, are untested.
-On Windows it has: a build of v0.1.0 loads, registers and renders in Resolume Arena 7.27.1 on software rendering (win-lab, Mesa llvmpipe, no GPU, 2026-09-24), with all 18 host controls matching the declaration, and Arena's log stays clean: 8 of the fleet Arena gate's 9 checks, in two runs. The ninth, controls, read Rows per Field and Freeze dead both times, because the gate holds a still picture: a still page comes round in under a second at any Rows per Field, and a frozen still is the same still; `--carriage` measures the first and the sweep the second. Software rendering says nothing about a GPU or about speed.
-The look has been seen on the synthetic test card and, through the harness's `--pipe`,
-on Resolume's bundled demo clips for the project video: eight colours and nothing
-between means a dark clip loses its mid-tones to black, so the guide says to lift a
+session, and whether the read-back stall is felt on a busy composition, haven't been tested.
+Windows is a different story: a build of v0.1.0 loads, registers and renders in Resolume Arena 7.27.1 on software rendering (win-lab, Mesa llvmpipe, no GPU, 2026-09-24), with all 18 host controls matching the declaration, and Arena's log stays clean: 8 of the fleet Arena gate's 9 checks, in two runs. The ninth, controls, read Rows per Field and Freeze as dead both times, because the gate holds a still picture: a still page comes round in under a second at any Rows per Field, and a frozen still is the same still; `--carriage` measures the first and the sweep the second. Software rendering says nothing about a GPU or about speed.
+I've seen the look on the synthetic test card and, through the harness's `--pipe`,
+on Resolume's bundled demo clips for the project video. Eight colours and nothing
+in between means a dark clip loses its mid-tones to black, so the guide says to lift a
 dark clip with a brightness effect ahead of this one. The separated gutter follows
 jsbeeb's reading of the SAA5050, not the datasheet figure. No OpenFX port, no presets.
-There is a [user guide](https://stoatworks-labs.com/software/teletext/guide/). The
+There's a [user guide](https://stoatworks-labs.com/software/teletext/guide/). The
 [browser demo](https://teletext-demo.stoatworks-labs.com/) runs the plugin's own
-shaders and reads the sixel means back as the plugin does, but its CPU half — the
-encoder, the transmission and the decoder — is a hand port to JavaScript, and nothing
+shaders and reads the sixel means back as the plugin does, but its CPU half (the
+encoder, the transmission and the decoder) is a hand port to JavaScript, and nothing
 checks a port but a reader.
 
 ## Build
@@ -207,7 +205,7 @@ macOS builds are universal (Apple Silicon + Intel) by default; add
 
 ## Building and testing
 
-The offline harness renders the real plugin class headlessly, on a synthetic 60 fps
+The offline harness renders the plugin class itself, headless, on a synthetic 60 fps
 clock:
 
 ```bash
@@ -224,7 +222,7 @@ tools/verify.sh                                        # all of it, on a fresh u
 ```
 
 Every check takes `--size`; run it at 320×180 as well as the raster you care about.
-Footage goes through the real plugin with `--pipe`, in the fleet's frame format:
+Footage goes through the plugin itself with `--pipe`, in the fleet's frame format:
 
 ```bash
 ffmpeg -i in.mov -f rawvideo -pix_fmt rgba - \
